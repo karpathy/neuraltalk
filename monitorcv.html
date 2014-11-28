@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+body {
+  font-family: courier;
+  padding: 0;
+  margin: 0;
+}
+#wrap {
+  margin: 5px;
+}
+.wtitle {
+  font-size: 2em;
+}
+.wparams {
+  font-size: 0.8em;
+}
+.wstats {
+  color: #900;
+}
+.wtime {
+}
+.witer {
+  font-weight: bold;
+}
+.ww {
+  border: 1px solid #333;
+  margin: 5px;
+  padding: 5px;
+  width: 500px;
+  display: inline-block;
+  vertical-align: top;
+}
+.wscore {
+  font-size: 2em;
+  font-weight: bold;
+  color: #0A0;
+}
+.wdis {
+  color: #0A0;
+  font-size: 20px;
+}
+</style>
+<link rel="stylesheet" type="text/css" href="vis_resources/d3utils.css">
+
+<script src="vis_resources/jquery-1.8.3.min.js"></script>
+<script src="vis_resources/underscore-min.js"></script>
+<script src="vis_resources/d3.min.js" charset="utf-8"></script>
+<script src="vis_resources/d3utils.js" charset="utf-8"></script>
+<script>
+
+// you'll have to change this code if you want to use it yourself to point to correct JSON files
+// refresh()
+
+NUM = 40;
+
+params_seen = {};
+
+filter_params = false;
+graphtype = 'cost';
+
+function filterParams(params) {
+  // this is meant to take out params thata re shared across all runs
+  if(!filter_params) { return params; }
+  var pout = {}
+  for(k in params) {
+    var v = params[k];
+    if(! (k in params_seen)) { params_seen[k] = [v]; }
+    if(params_seen[k].indexOf(v) == -1) { params_seen[k].push(v); }
+    if(params_seen[k].length > 1) {
+      pout[k] = v;
+    }
+  }
+  return pout;
+}
+
+gdata = {}
+function updateWorker(i, status_struct) {
+  all_data = status_struct.history;
+
+  gdata[i] = all_data; // keep global pointer to data
+  var data = all_data[all_data.length - 1]; // get last report
+  var div = d3.select('#w'+i);
+  $("#w"+i).empty();
+
+  var dupdated = new Date(data['time']); // not sure what's up
+  var dnow = new Date();
+  var ddiff = (dnow - dupdated)/1000/60 - 8*60; // in units of minutes
+  console.log(ddiff);
+  var dcol = Math.floor(Math.max(100, 255 - (ddiff/10.0)*100));
+  $('#w'+i).css('background-color', 'rgb(255,'+dcol + ',' + dcol + ')');
+
+  div.append('div').attr('class', 'wtitle').text('worker ' + i);
+  div.append('div').attr('class', 'wdis').text(status_struct['params']['dataset'] + ': ' + status_struct['params']['generator']);
+  div.append('div').attr('class', 'wtime').text('last updated: ' + data['time']);
+  div.append('div').attr('class', 'witer').text('epoch ' + data['epoch'][0].toFixed(2) + '/' + data['epoch'][1])
+  div.append('div').attr('class', 'witer').text('iter ' + data['iter'][0] + '/' + data['iter'][1])
+  div.append('div').attr('class', 'wparams').text(JSON.stringify(filterParams(status_struct['params']), null, ' '));
+  div.append('div').attr('class', 'wbatchtime').text('time per batch:' + data['time_per_batch'].toFixed(3) + 's');
+  div.append('div').attr('class', 'wstats').html('smooth train ppl: ' + data['smooth_train_ppl2'].toFixed(3));
+  div.append('div').attr('class', 'wscore').text(data['val_ppl2'].toFixed(3));
+  
+  var xdata = [];
+  var ydata = [];
+  for(var j=0;j<all_data.length;j++) {
+    data = all_data[j];
+    xdata.push(data['epoch'][0]);
+    ydata.push(data['train_ppl2']);
+  }
+  div.append('div').attr('id', 'wg'+i).attr('style', 'width:500px;height:300px;');
+  plotToDiv(document.getElementById('wg'+i), ydata, xdata);
+}
+
+function refresh() {
+  // load all jsons
+  for(var i=1;i<=NUM;i++) {
+    var json_path = 'status/visionlab'+i+'.stanford.edu_status.json';
+    $.getJSON(json_path, function(q){
+      return function(data) {
+        updateWorker(q, data);
+      };
+    }(i));
+  }
+}
+
+iid = 0;
+function start() {
+  var wrap = d3.select('#wrap');
+  for(var i=1;i<=NUM;i++) { wrap.append('div').attr('class', 'ww').attr('id', 'w'+i); }
+  refresh();
+  iid = setInterval(refresh, 60000);
+}
+
+function updateall() {
+  for(var i=1;i<=NUM;i++) {
+    var data = gdata[i];
+    if(data) {
+      updateWorker(i, data);
+    }
+  }
+}
+function allparams() {
+  filter_params = false;
+  updateall();
+}
+function filterparams() {
+  filter_params = true;
+  updateall();
+}
+
+</script>
+</head>
+
+<body onload="start()">
+  <div id="ui" style="margin:20px;">
+    <button type="button" onclick="allparams()">Show all params</button>
+    <button type="button" onclick="filterparams()">Filter params</button>
+  </div>
+  <div id="wrap">
+  </div>
+</body>
+
+</html>

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <title>Image Annotation Viewer</title>
+    <script src="vis_resources/jquery-1.8.3.min.js"></script>
+    <script src="vis_resources/d3.min.js" charset="utf-8"></script>
+    <script src="vis_resources/jsutils.js" charset="utf-8"></script>
+    <link rel="stylesheet" type="text/css" href="http://cs.stanford.edu/people/karpathy/cssutils.css">
+
+    <!-- Google fonts -->
+    <link href='http://fonts.googleapis.com/css?family=Roboto:400,300' rel='stylesheet' type='text/css'>
+
+    <style>
+    body {
+      color: #333;
+      font-family: 'Roboto', sans-serif;
+      font-weight: 300;
+      font-size: 18px;
+      margin: 0;
+      padding: 0;
+    }
+    #wrap {
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+    .hannot {
+      background-color: #EFE;
+    }
+    .rnnannot {
+      background-color: #EEF; 
+    }
+    .rannot {
+      background-color: #FEE;  
+    }
+    .annot {
+      padding: 3px;
+    }
+    .idiv {
+      display: inline-block;
+      vertical-align: top;
+      margin: 10px;
+    }
+    h1 {
+      font-weight: 300;
+      margin: 0;
+    }
+    h2 {
+      font-weight: 300;
+      font-size: 20px;
+    }
+    #wrap {
+      margin: 20px;
+    }
+    #header {
+      background-color: #f7f6f1;
+      padding: 20px;
+      border-bottom: 1px solid #555;
+      box-shadow: 0px 0px 4px 2px #555;
+    }
+    .bleu {
+      font-family: Courier, monospace;
+    }
+    .logprob {
+      font-family: Courier, monospace;
+    }
+    </style>
+    
+    <script type="application/javascript">
+
+    // globals
+    var db = [];
+    var imgperm = [];
+    var current_img_i = 0;
+
+    function start() {
+      loadDataset('result_struct.json');
+    }
+
+    function writeHeader() {
+      html = '<h2>Showing results for ' + db.checkpoint_params.dataset + ' on ' + db.imgblobs.length + ' images</h2>';
+      html += '<br>Eval params were: ' + JSON.stringify(db.params);
+      html += '<br>Final average BLEU was: ' + '(' + db.final_result.bleu[0].toFixed(2) + ',' + db.final_result.bleu[1].toFixed(2) + ',' + db.final_result.bleu[2].toFixed(2) + ')'
+      html += '<br>Final average perplexity of ground truth words: ' + db.gtppl.toFixed(2);
+      $("#blobsheader").html(html);
+    }
+
+    function renderNextImage() {
+      var ib = db.imgblobs[imgperm[current_img_i]]; // next image blob
+      var newdiv = d3.select("#blobs").append("div");
+      newdiv.attr("id", 'img'+current_img_i);
+      newdiv.attr("class", "idiv")
+      current_img_i++;
+      visImg(ib, newdiv); // function fills the pdiv with content
+    }
+
+    function visSentencesInit() {
+      $("#blobs").empty();
+      current_img_i = 0;
+      for(var i=0;i<20;i++) { renderNextImage(); }
+    }
+
+    // pix is index of the sentece
+    function visImg(ib, div) {
+      
+      // fetch the associated top image
+      var fname = ib.img_path;
+      var img = new Image();
+      img.src = fname;
+      img.onload = function() {
+
+        var width = this.width;
+        var height = this.height;
+        var desired_height = 300;
+        var hscale = desired_height / height;
+        var nwidth = width * hscale; 
+
+        var sdiv = div.append("div").attr('class', 'svgdiv');
+        var svg = sdiv.append("svg");
+
+        // okay now lets render the image
+        var svg_img = svg.append("image").attr("x", 0).attr("y", 0);
+        svg_img.attr('height', desired_height).attr('width', nwidth).attr('xlink:href', fname);
+        svg.attr('height', desired_height);
+        svg.attr('width', '100%');
+
+        // add human predictions
+        if('references' in ib && false) {
+          var dnew = div.append('div').attr('class','hannot annot').style('width', Math.floor(nwidth-6) + 'px');
+          insertAnnot(ib.references[0], dnew);
+        }
+        
+        // add predictions
+        if('candidate' in ib) {
+          var dnew = div.append('div').attr('class','rnnannot annot').style('width', Math.floor(nwidth-6) + 'px');
+          insertAnnot(ib.candidate, dnew);
+        }
+      }
+    }
+
+    function insertAnnot(annot, dnew) {
+      dnew.append('div').attr('class', 'atxt').text(annot.text);
+      dnew.append('div').attr('class', 'bleu').text('BLEU: (' + annot.bleu[0].toFixed(2) + ',' + annot.bleu[1].toFixed(2) + ',' + annot.bleu[2].toFixed(2) + ')');
+      dnew.append('div').attr('class', 'logprob').text('logprob: ' + annot.logprob.toFixed(2));
+    }
+
+    // Handle infinite Scroll
+    $(window).scroll(function() {
+      if($(window).scrollTop() > 0.9 * ($(document).height() - $(window).height())) {
+        if(current_img_i < imgperm.length) {
+          // try to stay 20 images ahead of the scroll
+          for(var q=0;q<20;q++) { renderNextImage(); }
+        }
+      }
+    });
+    
+    // Data Loading
+    function loadDataset(jsonpath) {
+      // ugly hack to prevent caching below ;(
+      var jsonmod = jsonpath + '?sigh=' + Math.floor(Math.random() * 100000);
+      $.getJSON(jsonpath, function(data) {
+        db = data; // assign to global
+        imgperm = randperm(db.imgblobs.length);
+        //imgperm = []; for(var i=0;i<db.imgblobs.length;i++) { imgperm.push(i); }
+        writeHeader();
+        visSentencesInit();
+      });
+    }
+    </script>
+  </head>
+  <body onload="start()">
+    <div id="header">
+        <h1>Sentence Generation Results</h1>
+        <div id="blobsheader"></div>
+      </div>
+    <div id="wrap">
+      <div id="wrap">
+        <div id="blobs"></div>  
+      </div>
+    </div>
+  </body>
+</html>
