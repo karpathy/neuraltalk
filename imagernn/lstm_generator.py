@@ -24,7 +24,7 @@ class LSTMGenerator:
     return { 'model' : model, 'update' : update, 'regularize' : regularize }
 
   @staticmethod
-  def forward(Xi, Xs, model, **kwargs):
+  def forward(Xi, Xs, model, params, **kwargs):
     """
     Xi is 1-d array of size D (containing the image representation)
     Xs is N x D (N time steps, rows are data containng word representations), and
@@ -39,9 +39,9 @@ class LSTMGenerator:
     # options
     # use the version of LSTM with tanh? Otherwise dont use tanh (Google style)
     # following http://arxiv.org/abs/1409.3215
-    tanhC_version = kwargs.get('tanhC_version', 0)
-    drop_prob_encoder = kwargs.get('drop_prob_encoder', 0.0)
-    drop_prob_decoder = kwargs.get('drop_prob_decoder', 0.0)
+    tanhC_version = params.get('tanhC_version', 0)
+    drop_prob_encoder = params.get('drop_prob_encoder', 0.0)
+    drop_prob_decoder = params.get('drop_prob_decoder', 0.0)
 
     if drop_prob_encoder > 0: # if we want dropout on the encoder
       # inverted version of dropout here. Suppose the drop_prob is 0.5, then during training
@@ -191,7 +191,7 @@ class LSTMGenerator:
     return { 'WLSTM': dWLSTM, 'Wd': dWd, 'bd': dbd, 'dXi': dX[0,:], 'dXs': dX[1:,:] }
 
   @staticmethod
-  def predict(Xi, model, Ws, **kwargs):
+  def predict(Xi, model, Ws, params, **kwargs):
     """ 
     Run in prediction mode with beam search. The input is the vector Xi, which 
     should be a 1-D array that contains the encoded image vector. We go from there.
@@ -200,7 +200,7 @@ class LSTMGenerator:
     this because we may not want it to be exactly model['Ws']. For example it could be
     fixed word vectors from somewhere else.
     """
-    tanhC_version = kwargs['tanhC_version']
+    tanhC_version = params['tanhC_version']
     beam_size = kwargs.get('beam_size', 1)
 
     WLSTM = model['WLSTM']

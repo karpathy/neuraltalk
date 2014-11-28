@@ -68,10 +68,8 @@ def main(params):
     n+=1
     print 'image %d/%d:' % (n, max_images)
     references = [x['tokens'] for x in img['sentences']] # as list of lists of tokens
-    kwparams = { 'tanhC_version' : checkpoint_params.get('tanhC_version', 0) ,\
-                 'beam_size' : params['beam_size'],\
-                 'generator' : checkpoint_params['generator']}
-    Ys = BatchGenerator.predict([{'image':img}], model, **kwparams)
+    kwparams = { 'beam_size' : params['beam_size'] }
+    Ys = BatchGenerator.predict([{'image':img}], model, checkpoint_params, **kwparams)
 
     img_blob = {} # we will build this up
     img_blob['img_path'] = img['local_file_path']

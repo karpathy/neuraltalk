@@ -31,7 +31,8 @@ class GenericBatchGenerator:
     output_size = len(misc['ixtoword']) # these should match though
     image_size = 4096 # size of CNN vectors hardcoded here
 
-    assert image_encoding_size == word_encoding_size, 'for now these must match. later with other models these could be different.'
+    if generator == 'lstm':
+      assert image_encoding_size == word_encoding_size, 'this implementation does not support different sizes for these parameters'
 
     # initialize the encoder models
     model = {}
@@ -84,10 +85,7 @@ class GenericBatchGenerator:
       Xi = Xe[i,:]
 
       # forward prop through the RNN
-      kwparams = { 'drop_prob_encoder' : params.get('drop_prob_encoder',0.0), \
-                   'drop_prob_decoder' : params.get('drop_prob_decoder',0.0), \
-                   'tanhC_version' : params.get('tanhC_version', 0) }
-      gen_Y, gen_cache = Generator.forward(Xi, Xs, model, predict_mode = predict_mode, **kwparams)
+      gen_Y, gen_cache = Generator.forward(Xi, Xs, model, params, predict_mode = predict_mode)
       gen_caches.append((ix, gen_cache))
       Ys.append(gen_Y)
 
@@ -138,17 +136,17 @@ class GenericBatchGenerator:
     return grads
 
   @staticmethod
-  def predict(batch, model, **kwparams):
+  def predict(batch, model, params, **kwparams):
     """ some code duplication here with forward pass, but I think we want the freedom in future """
     F = np.row_stack(x['image']['feat'] for x in batch) 
     We = model['We']
     be = model['be']
     Xe = F.dot(We) + be # Xe becomes N x image_encoding_size
-    generator_str = kwparams['generator']
+    generator_str = params['generator']
     Generator = decodeGenerator(generator_str)
     Ys = []
     for i,x in enumerate(batch):
-      gen_Y = Generator.predict(Xe[i, :], model, model['Ws'], **kwparams)
+      gen_Y = Generator.predict(Xe[i, :], model, model['Ws'], params, **kwparams)
       Ys.append(gen_Y)
     return Ys
 

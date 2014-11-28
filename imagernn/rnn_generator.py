@@ -14,19 +14,22 @@ class RNNGenerator:
   def init(input_size, hidden_size, output_size):
 
     model = {}
+    # connections to x_t
+    model['Wxh'] = initw(input_size, hidden_size)
+    model['bxh'] = np.zeros((1, hidden_size))
     # connections to h_{t-1}
     model['Whh'] = initw(hidden_size, hidden_size)
     model['bhh'] = np.zeros((1, hidden_size))
     # Decoder weights (e.g. mapping to vocabulary)
-    model['Wd'] = initw(hidden_size, output_size) * 0.01 # decoder
+    model['Wd'] = initw(hidden_size, output_size) * 0.1 # decoder
     model['bd'] = np.zeros((1, output_size))
 
-    update = ['Whh', 'bhh', 'Wd', 'bd']
-    regularize = ['Whh', 'Wd']
+    update = ['Whh', 'bhh', 'Wxh', 'bxh', 'Wd', 'bd']
+    regularize = ['Whh', 'Wxh', 'Wd']
     return { 'model' : model, 'update' : update, 'regularize' : regularize }
 
   @staticmethod
-  def forward(Xi, Xs, model, **kwargs):
+  def forward(Xi, Xs, model, params, **kwargs):
     """
     Xi is 1-d array of size D1 (containing the image representation)
     Xs is N x D2 (N time steps, rows are data containng word representations), and
@@ -36,8 +39,9 @@ class RNNGenerator:
     predict_mode = kwargs.get('predict_mode', False)
 
     # options
-    drop_prob_encoder = kwargs.get('drop_prob_encoder', 0.0)
-    drop_prob_decoder = kwargs.get('drop_prob_decoder', 0.0)
+    drop_prob_encoder = params.get('drop_prob_encoder', 0.0)
+    drop_prob_decoder = params.get('drop_prob_decoder', 0.0)
+    relu_encoders = params.get('rnn_relu_encoders', 0)
 
     if drop_prob_encoder > 0: # if we want dropout on the encoder
       # inverted version of dropout here. Suppose the drop_prob is 0.5, then during training
@@ -53,6 +57,15 @@ class RNNGenerator:
         Ui = (np.random.rand(*(Xi.shape)) < (1 - drop_prob_encoder)) * scale
         Xi *= Ui # drop!
 
+    # encode input vectors
+    Wxh = model['Wxh']
+    bxh = model['bxh']
+    Xsh = Xs.dot(Wxh) + bxh
+
+    if relu_encoders:
+      Xsh = np.maximum(Xsh, 0)
+      Xi = np.maximum(Xi, 0)
+
     # recurrence iteration for the Multimodal RNN similar to one described in Karpathy et al.
     d = model['Wd'].shape[0] # size of hidden layer
     n = Xs.shape[0]
@@ -62,8 +75,7 @@ class RNNGenerator:
     for t in xrange(n):
       
       prev = np.zeros(d) if t == 0 else H[t-1]
-      ht = Xi + Xs[t] + prev.dot(Whh) + bhh
-      H[t] = np.maximum(ht, 0) # ReLU nonlinearity
+      H[t] = np.maximum(Xi + Xsh[t] + prev.dot(Whh) + bhh, 0) # also ReLU
 
     if drop_prob_decoder > 0: # if we want dropout on the decoder
       if not predict_mode: # and we are in training mode
@@ -83,6 +95,10 @@ class RNNGenerator:
       cache['H'] = H
       cache['Wd'] = Wd
       cache['Xs'] = Xs
+      cache['Xsh'] = Xsh
+      cache['Wxh'] = Wxh
+      cache['Xi'] = Xi
+      cache['relu_encoders'] = relu_encoders
       cache['drop_prob_encoder'] = drop_prob_encoder
       cache['drop_prob_decoder'] = drop_prob_decoder
       if drop_prob_encoder > 0: 
@@ -98,9 +114,13 @@ class RNNGenerator:
     Wd = cache['Wd']
     H = cache['H']
     Xs = cache['Xs']
+    Xsh = cache['Xsh']
     Whh = cache['Whh']
+    Wxh = cache['Wxh']
+    Xi = cache['Xi']
     drop_prob_encoder = cache['drop_prob_encoder']
     drop_prob_decoder = cache['drop_prob_decoder']
+    relu_encoders = cache['relu_encoders']
     n,d = H.shape
 
     # backprop the decoder
@@ -113,36 +133,52 @@ class RNNGenerator:
       dH *= cache['U2']
 
     # backprop the recurrent connections
-    dXs = np.zeros(Xs.shape)
+    dXsh = np.zeros(Xsh.shape)
     dXi = np.zeros(d)
     dWhh = np.zeros(Whh.shape)
     dbhh = np.zeros((1,d))
     for t in reversed(xrange(n)):
       dht = (H[t] > 0) * dH[t] # backprop ReLU
       dXi += dht # backprop to Xi
-      dXs[t] += dht # backprop to word encodings
+      dXsh[t] += dht # backprop to word encodings
       dbhh[0] += dht # backprop to bias
 
       if t > 0:
         dH[t-1] += dht.dot(Whh.transpose())
         dWhh += np.outer(H[t-1], dht)
 
+    if relu_encoders:
+      # backprop relu
+      dXsh[Xsh <= 0] = 0
+      dXi[Xi <= 0] = 0
+
+    # backprop the word encoder
+    dWxh = Xs.transpose().dot(dXsh)
+    dbxh = np.sum(dXsh, axis=0, keepdims = True)
+    dXs = dXsh.dot(Wxh.transpose())
+
     if drop_prob_encoder > 0: # backprop encoder dropout
       dXi *= cache['Ui']
       dXs *= cache['Us']
 
-    return { 'Whh': dWhh, 'bhh': dbhh, 'Wd': dWd, 'bd': dbd, 'dXs' : dXs, 'dXi': dXi }
+    return { 'Whh': dWhh, 'bhh': dbhh, 'Wd': dWd, 'bd': dbd, 'Wxh':dWxh, 'bxh':dbxh, 'dXs' : dXs, 'dXi': dXi }
 
   @staticmethod
-  def predict(Xi, model, Ws, **kwargs):
+  def predict(Xi, model, Ws, params, **kwargs):
     
     beam_size = kwargs.get('beam_size', 1)
+    relu_encoders = params.get('rnn_relu_encoders', 0)
 
     d = model['Wd'].shape[0] # size of hidden layer
     Whh = model['Whh']
     bhh = model['bhh']
     Wd = model['Wd']
     bd = model['bd']
+    Wxh = model['Wxh']
+    bxh = model['bxh']
+
+    if relu_encoders:
+      Xi = np.maximum(Xi, 0)
 
     if beam_size > 1:
       # perform beam search
@@ -160,7 +196,10 @@ class RNNGenerator:
             beam_candidates.append(b)
             continue
           # tick the RNN for this beam
-          h1 = np.maximum(Xi + Ws[ixprev] + b[2].dot(Whh) + bhh, 0)
+          Xsh = Ws[ixprev].dot(Wxh) + bxh
+          if relu_encoders:
+            Xsh = np.maximum(Xsh, 0)
+          h1 = np.maximum(Xi + Xsh + b[2].dot(Whh) + bhh, 0)
           y1 = h1.dot(Wd) + bd
 
           # compute new candidates that expand out form this beam
@@ -190,7 +229,10 @@ class RNNGenerator:
       hprev = np.zeros((1, d)) # hidden layer representation
       xsprev = Ws[0] # start token
       while True:
-        ht = np.maximum(Xi + Ws[ixprev] + hprev.dot(Whh) + bhh, 0)
+        Xsh = Ws[ixprev].dot(Wxh) + bxh
+        if relu_encoders:
+          Xsh = np.maximum(Xsh, 0)
+        ht = np.maximum(Xi + Xsh + hprev.dot(Whh) + bhh, 0)
         Y = ht.dot(Wd) + bd
         hprev = ht
 
