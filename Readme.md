@@ -31,7 +31,7 @@ Lastly, note that this is currently research code, so a lot of the documentation
 
 ## Pretrained model
 
-Some pretrained models can be found [here](http://cs.stanford.edu/people/karpathy/deepimagesent/) (coming soon). The slightly hairy part is that if you wish to apply it to some arbitrary new image you have to first extract the VGG features with Caffe. I think there is opportunity for giving all of it as a single nice function that uses the Python wrapper to get the features and then runs the pretrained sentence model. I might add this in the future.
+Some pretrained models can be found in the [NeuralTalk Model Zoo](http://cs.stanford.edu/people/karpathy/neuraltalk/). The slightly hairy part is that if you wish to apply these models to some arbitrary new image (one not from Flickr8k/30k/COCO) you have to first extract the CNN features. I use the 16-layer [VGG network](http://www.robots.ox.ac.uk/~vgg/research/very_deep/) from Simonyan and Zisserman, because the model is beautiful, powerful and available with [Caffe](http://caffe.berkeleyvision.org/). There is opportunity for putting the preprocessing and inference into a single nice function that uses the Python wrapper to get the features and then runs the pretrained sentence model. I might add this in the future.
 
 ## Using your own data
 
