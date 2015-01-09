@@ -6,6 +6,7 @@ import numpy as np
 import code
 import socket
 import os
+import sys
 import cPickle as pickle
 
 from imagernn.data_provider import getDataProvider
@@ -144,6 +145,11 @@ def main(params):
   print 'updating: ' + ', '.join( '%s [%dx%d]' % (k, model[k].shape[0], model[k].shape[1]) for k in misc['regularize'])
   print 'number of learnable parameters total: %d' % (sum(model[k].shape[0] * model[k].shape[1] for k in misc['update']), )
 
+  if params.get('init_model_from', ''):
+    # load checkpoint
+    checkpoint = pickle.load(open(params['init_model_from'], 'rb'))
+    model = checkpoint['model'] # overwrite the model
+
   # initialize the Solver and the cost function
   solver = Solver()
   def costfun(batch, model):
@@ -185,9 +191,12 @@ def main(params):
 
     # perform gradient check if desired, with a bit of a burnin time (10 iterations)
     if it == 10 and do_grad_check:
+      print 'disabling dropout for gradient check...'
+      params['drop_prob_encoder'] = 0
+      params['drop_prob_decoder'] = 0
       solver.gradCheck(batch, model, costfun)
-      print 'done gradcheck. continue?'
-      raw_input()
+      print 'done gradcheck, exitting.'
+      sys.exit() # hmmm. probably should exit here
 
     # detect if loss is exploding and kill the job if so
     total_cost = cost['total_cost']
@@ -222,6 +231,13 @@ def main(params):
     if (((it+1) % eval_period_in_iters) == 0 and it < max_iters - 5) or is_last_iter:
       val_ppl2 = eval_split('val', dp, model, params, misc) # perform the evaluation on VAL set
       print 'validation perplexity = %f' % (val_ppl2, )
+      
+      # abort training if the perplexity is no good
+      min_ppl_or_abort = params['min_ppl_or_abort']
+      if val_ppl2 > min_ppl_or_abort and min_ppl_or_abort > 0:
+        print 'aborting job because validation perplexity %f < %f' % (val_ppl2, min_ppl_or_abort)
+        abort = True # abort the job
+
       write_checkpoint_ppl_threshold = params['write_checkpoint_ppl_threshold']
       if val_ppl2 < top_val_ppl2 or top_val_ppl2 < 0:
         if val_ppl2 < write_checkpoint_ppl_threshold or write_checkpoint_ppl_threshold < 0:
@@ -245,6 +261,7 @@ def main(params):
             print 'tried to write checkpoint into %s but got error: ' % (filepat, )
             print e
 
+
 if __name__ == "__main__":
 
   parser = argparse.ArgumentParser()
@@ -256,17 +273,21 @@ if __name__ == "__main__":
   parser.add_argument('-o', '--checkpoint_output_directory', dest='checkpoint_output_directory', type=str, default='cv/', help='output directory to write checkpoints to')
   parser.add_argument('--worker_status_output_directory', dest='worker_status_output_directory', type=str, default='status/', help='directory to write worker status JSON blobs to')
   parser.add_argument('--write_checkpoint_ppl_threshold', dest='write_checkpoint_ppl_threshold', type=float, default=-1, help='ppl threshold above which we dont bother writing a checkpoint to save space')
-
+  parser.add_argument('--init_model_from', dest='init_model_from', type=str, default='', help='initialize the model parameters from some specific checkpoint?')
+  
   # model parameters
+  parser.add_argument('--generator', dest='generator', type=str, default='lstm', help='generator to use')
   parser.add_argument('--image_encoding_size', dest='image_encoding_size', type=int, default=256, help='size of the image encoding')
   parser.add_argument('--word_encoding_size', dest='word_encoding_size', type=int, default=256, help='size of word encoding')
   parser.add_argument('--hidden_size', dest='hidden_size', type=int, default=256, help='size of hidden layer in generator RNNs')
-  parser.add_argument('--generator', dest='generator', type=str, default='lstm', help='generator to use')
-  parser.add_argument('-c', '--regc', dest='regc', type=float, default=1e-8, help='regularization strength')
+  # lstm-specific params
   parser.add_argument('--tanhC_version', dest='tanhC_version', type=int, default=0, help='use tanh version of LSTM?')
+  # rnn-specific params
   parser.add_argument('--rnn_relu_encoders', dest='rnn_relu_encoders', type=int, default=0, help='relu encoders before going to RNN?')
+  parser.add_argument('--rnn_feed_once', dest='rnn_feed_once', type=int, default=0, help='feed image to the rnn only single time?')
 
   # optimization parameters
+  parser.add_argument('-c', '--regc', dest='regc', type=float, default=1e-8, help='regularization strength')
   parser.add_argument('-m', '--max_epochs', dest='max_epochs', type=int, default=50, help='number of epochs to train for')
   parser.add_argument('--solver', dest='solver', type=str, default='rmsprop', help='solver type: vanilla/adagrad/adadelta/rmsprop')
   parser.add_argument('--momentum', dest='momentum', type=float, default=0.0, help='momentum for vanilla sgd')
@@ -285,7 +306,7 @@ if __name__ == "__main__":
   parser.add_argument('-p', '--eval_period', dest='eval_period', type=float, default=1.0, help='in units of epochs, how often do we evaluate on val set?')
   parser.add_argument('--eval_batch_size', dest='eval_batch_size', type=int, default=100, help='for faster validation performance evaluation, what batch size to use on val img/sentences?')
   parser.add_argument('--eval_max_images', dest='eval_max_images', type=int, default=-1, help='for efficiency we can use a smaller number of images to get validation error')
-
+  parser.add_argument('--min_ppl_or_abort', dest='min_ppl_or_abort', type=float , default=-1, help='if validation perplexity is below this threshold the job will abort')
 
   args = parser.parse_args()
   params = vars(args) # convert to ordinary dict
