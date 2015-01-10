@@ -72,7 +72,7 @@
     var current_img_i = 0;
 
     function start() {
-      loadDataset('result_struct_b1.json');
+      loadDataset('result_struct.json');
     }
 
     function writeHeader() {
@@ -112,14 +112,9 @@
         var hscale = desired_height / height;
         var nwidth = width * hscale; 
 
-        var sdiv = div.append("div").attr('class', 'svgdiv');
-        var svg = sdiv.append("svg");
-
         // okay now lets render the image
-        var svg_img = svg.append("image").attr("x", 0).attr("y", 0);
-        svg_img.attr('height', desired_height).attr('width', nwidth).attr('xlink:href', fname);
-        svg.attr('height', desired_height);
-        svg.attr('width', '100%');
+        var sdiv = div.append("div").attr('class', 'svgdiv');
+        sdiv.append('img').attr('src', fname).attr('height', desired_height).attr('width', nwidth);
 
         // add human predictions
         if('references' in ib && false) {
@@ -166,7 +161,7 @@
   </head>
   <body onload="start()">
     <div id="header">
-        <h1>Sentence Generation Results</h1>
+        <h1><a href="https://github.com/karpathy/neuraltalk">NeuralTalk</a> Sentence Generation Results</h1>
         <div id="blobsheader"></div>
       </div>
     <div id="wrap">
