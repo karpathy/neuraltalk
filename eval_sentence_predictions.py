@@ -13,28 +13,6 @@ from imagernn.data_provider import getDataProvider
 from imagernn.solver import Solver
 from imagernn.imagernn_utils import decodeGenerator, eval_split
 
-from nltk.align.bleu import BLEU
-
-# UTILS needed for BLEU score evaluation      
-def BLEUscore(candidate, references, weights):
-  p_ns = [BLEU.modified_precision(candidate, references, i) for i, _ in enumerate(weights, start=1)]
-  if all([x > 0 for x in p_ns]):
-      s = math.fsum(w * math.log(p_n) for w, p_n in zip(weights, p_ns))
-      bp = BLEU.brevity_penalty(candidate, references)
-      return bp * math.exp(s)
-  else: # this is bad
-      return 0
-
-def evalCandidate(candidate, references):
-  """ 
-  candidate is a single list of words, references is a list of lists of words
-  written by humans.
-  """
-  b1 = BLEUscore(candidate, references, [1.0])
-  b2 = BLEUscore(candidate, references, [0.5, 0.5])
-  b3 = BLEUscore(candidate, references, [1/3.0, 1/3.0, 1/3.0])
-  return [b1,b2,b3]
-
 def main(params):
 
   # load the checkpoint
@@ -61,13 +39,13 @@ def main(params):
 
   # iterate over all images in test set and predict sentences
   BatchGenerator = decodeGenerator(checkpoint_params)
-  all_bleu_scores = []
   n = 0
-  #for img in dp.iterImages(split = 'test', shuffle = True, max_images = max_images):
+  all_references = []
+  all_candidates = []
   for img in dp.iterImages(split = 'test', max_images = max_images):
     n+=1
     print 'image %d/%d:' % (n, max_images)
-    references = [x['tokens'] for x in img['sentences']] # as list of lists of tokens
+    references = [' '.join(x['tokens']) for x in img['sentences']] # as list of lists of tokens
     kwparams = { 'beam_size' : params['beam_size'] }
     Ys = BatchGenerator.predict([{'image':img}], model, checkpoint_params, **kwparams)
 
@@ -77,30 +55,39 @@ def main(params):
 
     # encode the human-provided references
     img_blob['references'] = []
-    for gtwords in references:
-      print 'GT: ' + ' '.join(gtwords)
-      img_blob['references'].append({'text': ' '.join(gtwords)})
+    for gtsent in references:
+      print 'GT: ' + gtsent
+      img_blob['references'].append({'text': gtsent})
 
     # now evaluate and encode the top prediction
     top_predictions = Ys[0] # take predictions for the first (and only) image we passed in
     top_prediction = top_predictions[0] # these are sorted with highest on top
-    candidate = [ixtoword[ix] for ix in top_prediction[1]]
-    print 'PRED: (%f) %s' % (top_prediction[0], ' '.join(candidate))
-    bleu_scores = evalCandidate(candidate, references)
-    print 'BLEU: B-1: %f B-2: %f B-3: %f' % tuple(bleu_scores)
-    img_blob['candidate'] = {'text': ' '.join(candidate), 'logprob': top_prediction[0], 'bleu': bleu_scores}
+    candidate = ' '.join([ixtoword[ix] for ix in top_prediction[1] if ix > 0]) # ix 0 is the END token, skip that
+    print 'PRED: (%f) %s' % (top_prediction[0], candidate)
 
-    all_bleu_scores.append(bleu_scores)
+    # save for later eval
+    all_references.append(references)
+    all_candidates.append(candidate)
+
+    img_blob['candidate'] = {'text': candidate, 'logprob': top_prediction[0]}    
     blob['imgblobs'].append(img_blob)
 
-  print 'final average bleu scores:'
-  bleu_averages = [sum(x[i] for x in all_bleu_scores)*1.0/len(all_bleu_scores) for i in xrange(3)]
-  blob['final_result'] = { 'bleu' : bleu_averages }
-  print 'FINAL BLEU: B-1: %f B-2: %f B-3: %f' % tuple(bleu_averages)
-  
+  # use perl script to eval BLEU score for fair comparison to other research work
+  # first write intermediate files
+  print 'writing intermediate files into eval/'
+  open('eval/output', 'w').write('\n'.join(all_candidates))
+  for q in xrange(5):
+    open('eval/reference'+`q`, 'w').write('\n'.join([x[q] for x in all_references]))
+  # invoke the perl script to get BLEU scores
+  print 'invoking eval/multi-bleu.perl script...'
+  owd = os.getcwd()
+  os.chdir('eval')
+  os.system('./multi-bleu.perl reference < output')
+  os.chdir(owd)
+
   # now also evaluate test split perplexity
   gtppl = eval_split('test', dp, model, checkpoint_params, misc, eval_max_images = max_images)
-  print 'perplexity of ground truth words: %f' % (gtppl, )
+  print 'perplexity of ground truth words based on dictionary of %d words: %f' % (len(ixtoword), gtppl)
   blob['gtppl'] = gtppl
 
   # dump result struct to file

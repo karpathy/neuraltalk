@@ -59,9 +59,6 @@
       border-bottom: 1px solid #555;
       box-shadow: 0px 0px 4px 2px #555;
     }
-    .bleu {
-      font-family: Courier, monospace;
-    }
     .logprob {
       font-family: Courier, monospace;
     }
@@ -75,13 +72,12 @@
     var current_img_i = 0;
 
     function start() {
-      loadDataset('result_struct.json');
+      loadDataset('result_struct_b1.json');
     }
 
     function writeHeader() {
       html = '<h2>Showing results for ' + db.checkpoint_params.dataset + ' on ' + db.imgblobs.length + ' images</h2>';
       html += '<br>Eval params were: ' + JSON.stringify(db.params);
-      html += '<br>Final average BLEU was: ' + '(' + db.final_result.bleu[0].toFixed(2) + ',' + db.final_result.bleu[1].toFixed(2) + ',' + db.final_result.bleu[2].toFixed(2) + ')'
       html += '<br>Final average perplexity of ground truth words: ' + db.gtppl.toFixed(2);
       $("#blobsheader").html(html);
     }
@@ -141,7 +137,6 @@
 
     function insertAnnot(annot, dnew) {
       dnew.append('div').attr('class', 'atxt').text(annot.text);
-      dnew.append('div').attr('class', 'bleu').text('BLEU: (' + annot.bleu[0].toFixed(2) + ',' + annot.bleu[1].toFixed(2) + ',' + annot.bleu[2].toFixed(2) + ')');
       dnew.append('div').attr('class', 'logprob').text('logprob: ' + annot.logprob.toFixed(2));
     }
 
