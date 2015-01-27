@@ -35,12 +35,9 @@ Some pretrained models can be found in the [NeuralTalk Model Zoo](http://cs.stan
 
 ## Using the model to predict on new images
 
-**TLDR**: This is currently non-trivial and I'm hoping to add it soon.
+The code allows you to easily predict and visualize results of running the model on COCO/Flickr8K/Flick30K images. If you want to run the code on arbitrary image (e.g. on your file system), things get a little more complicated because we need to first need to pipe your image through the VGG CNN to get the 4096-D activations on top. 
 
-The code allows you to easily predict and visualize results of running the model on COCO/Flickr8K/Flick30K images. If you want to run the code on arbitrary image (e.g. on your file system), things get more complicated because we need to first need to pipe your image through the VGG CNN to get the 4096-D activations on top. 
-
-For this you need Caffe, and the scripts I have inside `matlab_features_reference` will be enough for a knowledgeable person to figure out how to extract these features and use them with the framework. You would also need a new Python file which would take this result, load the model, and evaluate the model on the file. In other words, it is involved. I am currently trying to add this functionality in between the cracks of my research.
-
+Have a look inside the folder `example_images` for instructions on how to do this. Currently, the code for extracting the raw features from each image is in Matlab, so you will need it installed on your system. Caffe also has a wrapper for Python, but I wasn't yet able to use the Python wrapper to exactly reproduce the features I get from Matlab. The `example_images` will walk you through the process, and you will eventually use `predict_on_images.py` to run the prediction.
 
 ## Using your own data
 
