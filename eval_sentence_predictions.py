@@ -24,7 +24,12 @@ def main(params):
   checkpoint_params = checkpoint['params']
   dataset = checkpoint_params['dataset']
   model = checkpoint['model']
+  dump_folder = params['dump_folder']
 
+  if dump_folder:
+    print 'creating dump folder ' + dump_folder
+    os.system('mkdir -p ' + dump_folder)
+    
   # fetch the data provider
   dp = getDataProvider(dataset)
 
@@ -52,6 +57,13 @@ def main(params):
     img_blob = {} # we will build this up
     img_blob['img_path'] = img['local_file_path']
     img_blob['imgid'] = img['imgid']
+
+    if dump_folder:
+      # copy source file to some folder. This makes it easier to distribute results
+      # into a webpage, because all images that were predicted on are in a single folder
+      source_file = img['local_file_path']
+      target_file = os.path.join(dump_folder, os.path.basename(img['local_file_path']))
+      os.system('cp %s %s' % (source_file, target_file))
 
     # encode the human-provided references
     img_blob['references'] = []
@@ -101,6 +113,7 @@ if __name__ == "__main__":
   parser.add_argument('-b', '--beam_size', type=int, default=1, help='beam size in inference. 1 indicates greedy per-word max procedure. Good value is approx 20 or so, and more = better.')
   parser.add_argument('--result_struct_filename', type=str, default='result_struct.json', help='filename of the result struct to save')
   parser.add_argument('-m', '--max_images', type=int, default=-1, help='max images to use')
+  parser.add_argument('-d', '--dump_folder', type=str, default="", help='dump the relevant images to a separate folder with this name?')
 
   args = parser.parse_args()
   params = vars(args) # convert to ordinary dict
