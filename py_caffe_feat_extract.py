@@ -17,7 +17,7 @@ def reduce_along_dim(img , dim , weights , indicies):
         out_img = img[indicies,:,:]*weights
         out_img = np.sum(out_img,axis=1)
         
-    out_img = np.clip(out_img,0,255)
+    out_img = np.clip(out_img,0,1)
     return out_img
 
             
@@ -29,6 +29,8 @@ def cubic_spline(x):
     return kernel_weight
     
 def contribution(in_dim_len , out_dim_len , scale ):
+    
+    kernel_width = 4
     if scale < 1:
         kernel_width =  4 / scale
         
@@ -74,8 +76,14 @@ def contribution(in_dim_len , out_dim_len , scale ):
     return weights , indicies
      
 def imresize(img , cropped_width , cropped_height):
+    
+    
+    
     width_scale  = float(cropped_width)  / img.shape[1]
     height_scale = float(cropped_height) / img.shape[0] 
+    
+    if len(img.shape) == 2: #Gray Scale Case
+        img = np.tile(img[:,:,np.newaxis] , (1,1,3)) 
     
     order   = np.argsort([height_scale , width_scale])
     scale   = [height_scale , width_scale]
@@ -90,10 +98,10 @@ def imresize(img , cropped_width , cropped_height):
     for i in range(0 , len(order)):
         img = reduce_along_dim(img , order[i] , weights[order[i]] , indicies[order[i]])
         
-    return img.astype(np.uint8)
+    return img
 
         
-def caffe_extract_feats(path_imgs , path_model_def , path_model , batch_size = 1 , WITH_GPU = True):
+def caffe_extract_feats(path_imgs , path_model_def , path_model , WITH_GPU = True , batch_size = 10 ):
     '''
     Function using the caffe python wrapper to extract 4096 from VGG_ILSVRC_16_layers.caffemodel model
     
@@ -114,7 +122,7 @@ def caffe_extract_feats(path_imgs , path_model_def , path_model , batch_size = 1
     else:
         caffe.set_mode_cpu()
     print "loading model:",path_model
-    caffe_net = caffe.Classifier(path_model_def , path_model , image_dims = (224,224) , raw_scale = 255,
+    caffe_net = caffe.Classifier(path_model_def , path_model , raw_scale = 255,
                             mean = np.array([103.939, 116.779, 123.68]) )
 
     feats = np.zeros((4096 , len(path_imgs)))
@@ -123,12 +131,12 @@ def caffe_extract_feats(path_imgs , path_model_def , path_model , batch_size = 1
         list_imgs = []
         for i in range(b , b + batch_size ):
             if i < len(path_imgs):
-                list_imgs.append( np.array(caffe.io.load_image(path_imgs[i]) ) )
+                list_imgs.append( np.array(imresize(caffe.io.load_image(path_imgs[i]) , 224 , 224) ) )
             else:
                 list_imgs.append(list_imgs[-1]) #Appending the last image in order to have a batch of size 10. The extra predictions are removed later..
                 
         caffe_input = np.asarray([caffe_net.transformer.preprocess('data', in_) for in_ in list_imgs]) #preprocess the images
-       
+        
         predictions =caffe_net.forward(data = caffe_input)
         predictions = predictions[caffe_net.outputs[0]].transpose()
         
@@ -149,7 +157,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_path', dest='model_path',type=str,  help='Path to VGG_ILSVRC_16_layers pretrained model weight file i.e VGG_ILSVRC_16_layers.caffemodel')
     parser.add_argument('-i',dest='input_directory',help='Path to Directory containing images to be processed.')
     parser.add_argument('--filter',default = None ,dest='filter', help='Text file containing images names in the input directory to be processed. If no argument provided all images are processed.')
-    parser.add_argument('--WITH_GPU',default = True , type = bool , dest='WITH_GPU', help = 'Caffe uses GPU for feature extraction')
+    parser.add_argument('--WITH_GPU', action='store_true', dest='WITH_GPU', help = 'Caffe uses GPU for feature extraction')
 
     args = parser.parse_args()
     
@@ -158,7 +166,7 @@ if __name__ == '__main__':
     path_model  = args.model_path
     filter_path = args.filter
     WITH_GPU    = args.WITH_GPU
-    
+
     if not os.path.exists(input_directory):
         raise RuntimeError("%s , Directory does not exist"%(input_directory))
     
