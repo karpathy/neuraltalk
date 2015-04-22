@@ -34,7 +34,7 @@ class Solver:
         if not u in self.step_cache_: 
           self.step_cache_[u] = np.zeros(model[u].shape)
           if solver == 'adadelta':
-            self.step_cache2_[u] = np.zeros(model[u].shape) # adadelta needs one more cache
+            self.step_cache_2[u] = np.zeros(model[u].shape) # adadelta needs one more cache
 
     # compute cost and gradient
     cg = cost_function(batch, model)
