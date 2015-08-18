@@ -1,8 +1,10 @@
 import sys
+import os.path
 import argparse
 
 import numpy as np
 from scipy.misc import imread, imresize
+import scipy.io
 
 import cPickle as pickle
 
@@ -23,8 +25,9 @@ parser.add_argument('--out',
 
 args = parser.parse_args()
 
-caffepath = args.caffe + '/python'
-sys.path.append(caffepath)
+if args.caffe:
+    caffepath = args.caffe + '/python'
+    sys.path.append(caffepath)
 
 import caffe
 
@@ -74,7 +77,7 @@ def batch_predict(filenames, net):
             # mean subtraction
             im = im - np.array([103.939, 116.779, 123.68])
             # resize
-            im = imresize(im, (H, W))
+            im = imresize(im, (H, W), 'bicubic')
             # get channel in correct dimension
             im = np.transpose(im, (2, 0, 1))
             batch_images[j,:,:,:] = im
@@ -98,17 +101,22 @@ if args.gpu:
 else:
     caffe.set_mode_cpu()
 
-net = caffe.Net(args.model_def, args.model)
+net = caffe.Net(args.model_def, args.model, caffe.TEST)
 caffe.set_phase_test()
 
 filenames = []
+
+base_dir = os.path.dirname(args.files)
 with open(args.files) as fp:
     for line in fp:
-        filename = line.strip().split()[0]
+        filename = os.path.join(base_dir, line.strip().split()[0])
         filenames.append(filename)
 
 allftrs = batch_predict(filenames, net)
 
-# store the features in a pickle file
-with open(args.out, 'w') as fp:
-    pickle.dump(allftrs, fp)
+if args.out:
+    # store the features in a pickle file
+    with open(args.out, 'w') as fp:
+        pickle.dump(allftrs, fp)
+
+scipy.io.savemat(os.path.join(base_dir, 'vgg_feats.mat'), mdict =  {'feats': np.transpose(allftrs)})
