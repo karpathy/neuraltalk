@@ -40,7 +40,7 @@ def predict(in_data, net):
     """
 
     out = net.forward(**{net.inputs[0]: in_data})
-    features = out[net.outputs[0]].squeeze(axis=(2,3))
+    features = out[net.outputs[0]]
     return features
 
 
@@ -102,7 +102,6 @@ else:
     caffe.set_mode_cpu()
 
 net = caffe.Net(args.model_def, args.model, caffe.TEST)
-caffe.set_phase_test()
 
 filenames = []
 
