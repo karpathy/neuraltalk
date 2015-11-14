@@ -1,22 +1,31 @@
 %% vgg / caffe spec
 
-use_gpu = 1;
-caffe('set_device', 1);
-model_def_file = '/home/karpathy/caffe2/models/vgg_ilsvrc_16/deploy_features.prototxt';
-model_file = '/home/karpathy/caffe2/models/vgg_ilsvrc_16/VGG_ILSVRC_16_layers.caffemodel';
+use_gpu = 0;
+gpu_id = 1;
+
+% Set caffe mode
+if use_gpu
+  caffe.set_mode_gpu();
+  caffe.set_device(gpu_id);
+else
+  caffe.set_mode_cpu();
+end
+
+model = './models/vgg_ilsvrc_16/VGG_ILSVRC_16_layers_deploy.prototxt';
+weights = './models/vgg_ilsvrc_16/VGG_ILSVRC_16_layers.caffemodel';
 batch_size = 10;
 
-matcaffe_init(use_gpu, model_def_file, model_file);
+net = caffe.Net(model, weights, 'test');
 
 %% input files spec
 
-root_path = '/data2/karpathy/flickr30k/';
+root_path = './data/flickr30k/';
 fs = textread([root_path 'all_imgs.txt'], '%s');
 N = length(fs);
 
 %%
 
-% iterate over the iamges in batches
+% iterate over the images in batches
 feats = zeros(4096, N, 'single');
 for b=1:batch_size:N
 
@@ -32,7 +41,7 @@ for b=1:batch_size:N
     input_data = prepare_images_batch(Is);
 
     tic;
-    scores = caffe('forward', {input_data});
+    scores = net.forward({input_data});
     scores = squeeze(scores{1});
     tt = toc;
 
