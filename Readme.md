@@ -1,5 +1,9 @@
 #NeuralTalk
 
+**Warning: Deprecated.**
+Hi there, this code is now quite old and inefficient, and now deprecated. I am leaving it on Github for educational purposes, but if you would like to run or train image captioning I warmly recommend my new code release [NeuralTalk2](https://github.com/karpathy/neuraltalk2). NeuralTalk2 is written in [Torch](http://torch.ch/) and is SIGNIFICANTLY (I mean, ~100x+) faster because it is batched and runs on the GPU. It also supports CNN finetuning, which helps a lot with performance.
+
+
 This project contains *Python+numpy* source code for learning **Multimodal Recurrent Neural Networks** that describe images with sentences.
 
 This line of work was recently featured in a [New York Times article](http://www.nytimes.com/2014/11/18/science/researchers-announce-breakthrough-in-content-recognition-software.html) and has been the subject of multiple academic papers from the research community over the last few months. This code currently implements the models proposed by [Vinyals et al. from Google (CNN + LSTM)](http://arxiv.org/abs/1411.4555) and by [Karpathy and Fei-Fei from Stanford (CNN + RNN)](http://cs.stanford.edu/people/karpathy/deepimagesent/). Both models take an image and predict its sentence description with a Recurrent Neural Network (either an LSTM or an RNN).
